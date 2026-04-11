@@ -101,7 +101,7 @@ def load(data: bytes) -> Dict[str, tf.Tensor]:
 
 
 def load_file(
-    filename: Union[str, os.PathLike], *, backend: str = "mmap"
+    filename: Union[str, os.PathLike], *, backend: Optional[str] = None
 ) -> Dict[str, tf.Tensor]:
     """
     Loads a safetensors file into tensorflow format.
@@ -109,9 +109,10 @@ def load_file(
     Args:
         filename (`str`, or `os.PathLike`)):
             The name of the file which contains the tensors
-        backend (`str`, *optional*, defaults to `"mmap"`):
-            Storage backend used to serve tensor bytes. `"mmap"` (default)
-            and `"pread"` uses `pread(2)` to read tensor bytes.
+        backend (`str`, *optional*):
+            Storage backend used to serve tensor bytes. If omitted,
+            `SAFETENSORS_BACKEND` is used, falling back to `"mmap"`.
+            `"pread"` uses `pread(2)` to read tensor bytes.
 
     Returns:
         `Dict[str, tf.Tensor]`: dictionary that contains name as key, value as `tf.Tensor`

@@ -90,6 +90,32 @@ class PreadBackendTests(unittest.TestCase):
             if a.numel() > 0:
                 self.assertTrue(_tensors_equal(a.cpu(), b.cpu()), k)
 
+    def test_env_default_backend(self):
+        old_backend = os.environ.get("SAFETENSORS_BACKEND")
+        os.environ["SAFETENSORS_BACKEND"] = "pread"
+        try:
+            with safe_open(self.path, framework="pt", device="cpu") as f:
+                sd = f.get_tensors()
+        finally:
+            if old_backend is None:
+                os.environ.pop("SAFETENSORS_BACKEND", None)
+            else:
+                os.environ["SAFETENSORS_BACKEND"] = old_backend
+        self._assert_state_dict_equal(sd)
+
+    def test_explicit_backend_overrides_env(self):
+        old_backend = os.environ.get("SAFETENSORS_BACKEND")
+        os.environ["SAFETENSORS_BACKEND"] = "not_a_backend"
+        try:
+            with safe_open(self.path, framework="pt", device="cpu", backend="mmap") as f:
+                sd = f.get_tensors()
+        finally:
+            if old_backend is None:
+                os.environ.pop("SAFETENSORS_BACKEND", None)
+            else:
+                os.environ["SAFETENSORS_BACKEND"] = old_backend
+        self._assert_state_dict_equal(sd)
+
     def test_get_slice(self):
         with safe_open(self.path, framework="pt", device="cpu", backend="pread") as f:
             slice_obj = f.get_slice("fp32_2d")

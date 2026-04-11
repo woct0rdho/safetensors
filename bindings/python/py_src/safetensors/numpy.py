@@ -123,7 +123,7 @@ def load(data: bytes) -> Dict[str, np.ndarray]:
 
 
 def load_file(
-    filename: Union[str, os.PathLike], *, backend: str = "mmap"
+    filename: Union[str, os.PathLike], *, backend: Optional[str] = None
 ) -> Dict[str, np.ndarray]:
     """
     Loads a safetensors file into numpy format.
@@ -131,9 +131,10 @@ def load_file(
     Args:
         filename (`str`, or `os.PathLike`)):
             The name of the file which contains the tensors
-        backend (`str`, *optional*, defaults to `"mmap"`):
-            Storage backend used to serve tensor bytes. `"mmap"` (default)
-            and `"pread"` uses `pread(2)` to read tensor bytes.
+        backend (`str`, *optional*):
+            Storage backend used to serve tensor bytes. If omitted,
+            `SAFETENSORS_BACKEND` is used, falling back to `"mmap"`.
+            `"pread"` uses `pread(2)` to read tensor bytes.
 
     Returns:
         `Dict[str, np.ndarray]`: dictionary that contains name as key, value as `np.ndarray`

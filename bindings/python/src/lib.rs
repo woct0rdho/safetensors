@@ -6,7 +6,7 @@ use pyo3::exceptions::{PyException, PyFileNotFoundError};
 use pyo3::prelude::*;
 use pyo3::sync::OnceLockExt;
 use pyo3::types::IntoPyDict;
-use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyList, PySlice};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyEllipsis, PyList, PySlice};
 use pyo3::Bound as PyBound;
 use pyo3::{intern, PyErr};
 use safetensors::slice::TensorIndexer;
@@ -14,6 +14,7 @@ use safetensors::tensor::{Dtype, Metadata, SafeTensors, TensorInfo, TensorView};
 use safetensors::View;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::ops::Bound;
 use std::path::PathBuf;
@@ -29,6 +30,8 @@ static PADDLE_MODULE: OnceLock<Py<PyModule>> = OnceLock::new();
 
 #[cfg(target_os = "macos")]
 static MPS_HOST_ALIAS_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
+const SAFETENSORS_BACKEND_ENV: &str = "SAFETENSORS_BACKEND";
 
 /// Describes a single tensor passed to [`serialize`] / [`serialize_file`].
 ///
@@ -354,11 +357,27 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Backend {
 
     fn extract(ob: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         let name: String = ob.extract()?;
-        match &name[..] {
+        Self::from_name(&name)
+    }
+}
+
+impl Backend {
+    fn from_name(name: &str) -> PyResult<Self> {
+        match name {
             "mmap" => Ok(Backend::Mmap),
             "pread" => Ok(Backend::Pread),
             name => Err(SafetensorError::new_err(format!(
                 "backend {name:?} is invalid (expected one of: \"mmap\", \"pread\")"
+            ))),
+        }
+    }
+
+    fn default() -> PyResult<Self> {
+        match env::var(SAFETENSORS_BACKEND_ENV) {
+            Ok(name) => Self::from_name(&name),
+            Err(env::VarError::NotPresent) => Ok(Backend::Mmap),
+            Err(err) => Err(SafetensorError::new_err(format!(
+                "could not read environment variable {SAFETENSORS_BACKEND_ENV}: {err}"
             ))),
         }
     }
@@ -1263,6 +1282,11 @@ impl Open {
 ///
 ///     device (`str`, defaults to `"cpu"`):
 ///         The device on which you want the tensors.
+///
+///     backend (`str`, *keyword-only*, *optional*):
+///         Storage backend used to serve tensor bytes. If omitted,
+///         `SAFETENSORS_BACKEND` is used, falling back to `"mmap"`.
+///         `"pread"` uses `pread(2)` to read tensor bytes.
 #[pyclass]
 #[allow(non_camel_case_types)]
 struct safe_open {
@@ -1282,13 +1306,17 @@ impl safe_open {
 #[pymethods]
 impl safe_open {
     #[new]
-    #[pyo3(signature = (filename, framework, device=Some(Device::Cpu), *, backend=Backend::Mmap))]
+    #[pyo3(signature = (filename, framework, device=Some(Device::Cpu), *, backend=None))]
     fn new(
         filename: PathBuf,
         framework: Framework,
         device: Option<Device>,
-        backend: Backend,
+        backend: Option<Backend>,
     ) -> PyResult<Self> {
+        let backend = match backend {
+            Some(backend) => backend,
+            None => Backend::default()?,
+        };
         let inner = Some(Open::new(filename, framework, device, backend)?);
         Ok(Self { inner })
     }
@@ -1438,19 +1466,23 @@ impl PySafeSlice {
         data: &[u8],
     ) -> PyResult<Py<PyAny>> {
         let pyslices = slices;
-        let parsed: Slice = pyslices.extract()?;
         let is_list = pyslices.is_instance_of::<PyList>();
-        let parsed: Vec<SliceIndex> = match parsed {
-            Slice::Slice(slice) => vec![slice],
-            Slice::Slices(slices) => {
-                if slices.is_empty() && is_list {
-                    vec![SliceIndex::Slice(PySlice::new(pyslices.py(), 0, 0, 0))]
-                } else if is_list {
-                    return Err(SafetensorError::new_err(
-                        "Non empty lists are not implemented",
-                    ));
-                } else {
-                    slices
+        let parsed: Vec<SliceIndex> = if pyslices.is_instance_of::<PyEllipsis>() {
+            Vec::new()
+        } else {
+            let parsed: Slice = pyslices.extract()?;
+            match parsed {
+                Slice::Slice(slice) => vec![slice],
+                Slice::Slices(slices) => {
+                    if slices.is_empty() && is_list {
+                        vec![SliceIndex::Slice(PySlice::new(pyslices.py(), 0, 0, 0))]
+                    } else if is_list {
+                        return Err(SafetensorError::new_err(
+                            "Non empty lists are not implemented",
+                        ));
+                    } else {
+                        slices
+                    }
                 }
             }
         };
@@ -2192,13 +2224,17 @@ impl _safe_open_handle {
 #[pymethods]
 impl _safe_open_handle {
     #[new]
-    #[pyo3(signature = (f, framework, device=Some(Device::Cpu), *, backend=Backend::Mmap))]
+    #[pyo3(signature = (f, framework, device=Some(Device::Cpu), *, backend=None))]
     fn new(
         f: Py<PyAny>,
         framework: Framework,
         device: Option<Device>,
-        backend: Backend,
+        backend: Option<Backend>,
     ) -> PyResult<Self> {
+        let backend = match backend {
+            Some(backend) => backend,
+            None => Backend::default()?,
+        };
         let filename = Python::attach(|py| -> PyResult<PathBuf> {
             let _ = f.getattr(py, "fileno")?;
             let filename = f.getattr(py, "name")?;

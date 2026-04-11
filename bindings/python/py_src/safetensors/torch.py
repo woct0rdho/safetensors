@@ -197,7 +197,7 @@ def load_model(
     strict: bool = True,
     device: Union[str, int] = "cpu",
     *,
-    backend: str = "mmap",
+    backend: Optional[str] = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Loads a given filename onto a torch model.
@@ -215,9 +215,10 @@ def load_model(
         device (`Union[str, int]`, *optional*, defaults to `cpu`):
             The device where the tensors need to be located after load.
             available options are all regular torch device locations.
-        backend (`str`, *optional*, defaults to `"mmap"`):
-            Storage backend used to serve tensor bytes. `"mmap"` (default)
-            and `"pread"` uses `pread(2)` to read tensor bytes.
+        backend (`str`, *optional*):
+            Storage backend used to serve tensor bytes. If omitted,
+            `SAFETENSORS_BACKEND` is used, falling back to `"mmap"`.
+            `"pread"` uses `pread(2)` to read tensor bytes.
 
     Returns:
         `(missing, unexpected): (List[str], List[str])`
@@ -329,7 +330,7 @@ def load_file(
     filename: Union[str, os.PathLike],
     device: Union[str, int] = "cpu",
     *,
-    backend: str = "mmap",
+    backend: Optional[str] = None,
 ) -> Dict[str, torch.Tensor]:
     """
     Loads a safetensors file into torch format.
@@ -340,9 +341,10 @@ def load_file(
         device (`Union[str, int]`, *optional*, defaults to `cpu`):
             The device where the tensors need to be located after load.
             available options are all regular torch device locations.
-        backend (`str`, *optional*, defaults to `"mmap"`):
-            Storage backend used to serve tensor bytes. `"mmap"` (default)
-            and `"pread"` uses `pread(2)` to read tensor bytes.
+        backend (`str`, *optional*):
+            Storage backend used to serve tensor bytes. If omitted,
+            `SAFETENSORS_BACKEND` is used, falling back to `"mmap"`.
+            `"pread"` uses `pread(2)` to read tensor bytes.
 
     Returns:
         `Dict[str, torch.Tensor]`: dictionary that contains name as key, value as `torch.Tensor`

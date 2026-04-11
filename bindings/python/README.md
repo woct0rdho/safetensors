@@ -43,6 +43,8 @@ save_file(tensors, "./model.safetensors")
 loaded = load_file("./model.safetensors")
 ```
 
+By default, tensors are served from the `mmap` backend. You can select the default backend with `SAFETENSORS_BACKEND=mmap|pread`, or override it per call with `safe_open(..., backend="pread")`.
+
 ### Developing
 
 ```
